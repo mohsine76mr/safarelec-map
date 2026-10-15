@@ -1,41 +1,42 @@
-{
-  "source": "Placemark V.kmz",
-  "placemarks": [
-    {
-      "name": "Élément 1",
-      "description": "",
-      "styleUrl": "#m_ylw-pushpin5",
-      "geometries": [
-        {
-          "type": "LineString",
-          "coordinates": [
-            [
-              33.51105802281235,
-              -7.663528393152454
-            ],
-            [
-              33.50820280228898,
-              -7.668048182626394
-            ],
-            [
-              33.50745521453261,
-              -7.668981726740126
-            ],
-            [
-              33.50647862814961,
-              -7.669884718701521
-            ],
-            [
-              33.5040149171183,
-              -7.667717063584668
-            ],
-            [
-              33.50332917427237,
-              -7.667407469482534
-            ]
-          ]
-        }
-      ]
-    }
-  ]
-}
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAFARELEC MAP — KMZ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+html,body,#map{height:100%;width:100%;margin:0;font-family:Arial,sans-serif}
+#panel{position:absolute;z-index:1000;top:12px;left:12px;width:min(360px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;background:#fff;border-radius:9px;padding:13px;box-shadow:0 2px 12px #0004}
+h2{font-size:17px;margin:0 0 8px} #status{font-size:12px;color:#444;margin-bottom:9px}
+.item{font-size:13px;padding:6px 0;border-top:1px solid #ddd;display:flex;gap:8px;align-items:flex-start}
+.item input{margin-top:3px}.item button{font-size:12px;margin-left:auto}
+.small{font-size:11px;color:#555}
+</style></head><body><div id="map"></div>
+<div id="panel"><h2>SAFARELEC MAP — KMZ</h2><div id="status">Chargement des données…</div><div id="items"></div><div class="small">Les éléments affichés proviennent du KMZ fourni. Fond satellite fourni par Esri.</div></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map');
+const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(map);
+const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+L.control.layers({'Satellite':satellite,'Plan':streets}).addTo(map);
+const status=document.getElementById('status'), items=document.getElementById('items'), bounds=[];
+fetch('./routes.json?v='+Date.now()).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(data=>{
+ if(!Array.isArray(data)||!data.length){status.textContent='Aucune géométrie exploitable trouvée dans le KMZ.';map.setView([33.5,-7.65],12);return;}
+ let n=0;
+ data.forEach((f,i)=>{
+  const c=f.coords; if(!Array.isArray(c)||!c.length)return;
+  let layer;
+  if(f.type==='line'&&c.length>=2){layer=L.polyline(c,{color:f.color||'#8e44ad',weight:5,opacity:.95}).addTo(map);bounds.push(layer.getBounds());}
+  else if(f.type==='polygon'&&c.length){layer=L.polygon(c,{color:f.color||'#8e44ad',weight:3,fillOpacity:.12}).addTo(map);bounds.push(layer.getBounds());}
+  else if(f.type==='point'){layer=L.marker(c[0]).addTo(map);bounds.push(L.latLngBounds(c[0],c[0]));}
+  if(!layer)return;
+  layer.bindPopup('<b>'+String(f.name||'Élément')+'</b>'+(f.description?'<br>'+String(f.description):''));
+  const row=document.createElement('div');row.className='item';
+  const cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.onchange=()=>cb.checked?layer.addTo(map):map.removeLayer(layer);
+  const label=document.createElement('span');label.textContent=f.name||('Élément '+(i+1));
+  const btn=document.createElement('button');btn.textContent='Zoom';btn.onclick=()=>{if(layer.getBounds)map.fitBounds(layer.getBounds().pad(.15));else map.setView(c[0],17)};
+  row.append(cb,label,btn);items.appendChild(row);n++;
+ });
+ status.textContent=n+' élément(s) affichable(s) chargés.';
+ if(bounds.length){let b=bounds[0];for(let i=1;i<bounds.length;i++)b=b.extend(bounds[i]);map.fitBounds(b.pad(.12));}
+ else map.setView([33.5,-7.65],12);
+}).catch(e=>{status.textContent='Erreur de chargement de routes.json : '+e.message;map.setView([33.5,-7.65],12);});
+</script></body></html>
