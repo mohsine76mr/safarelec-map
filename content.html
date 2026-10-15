@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAFARELEC MAP — ONCF LGV</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:Arial,sans-serif;color:#17365d}
+#app{height:100%;display:flex;flex-direction:column;background:#fff}
+header{height:42px;flex:0 0 42px;background:#17365d;color:#fff;padding:7px 10px;display:flex;align-items:center;justify-content:space-between}
+header strong{font-size:14px}header span{font-size:10px;opacity:.9}
+#toolbar{display:flex;gap:6px;align-items:center;padding:6px;background:#f2f6fa;border-bottom:1px solid #c8d6e5;flex-wrap:wrap}
+button{border:1px solid #9db4c9;background:white;color:#17365d;border-radius:4px;padding:5px 8px;cursor:pointer;font-size:11px}
+button.active{background:#d9eaf7;border-color:#1f4e78;font-weight:bold}
+#search{flex:1;min-width:130px;padding:6px 8px;border:1px solid #9db4c9;border-radius:4px;font-size:12px}
+#map{flex:1;min-height:160px}
+#legend{display:flex;gap:12px;align-items:center;padding:5px 9px;font-size:10px;background:#fff;border-top:1px solid #d8e1ea;flex-wrap:wrap}
+.swatch{display:inline-block;width:18px;height:4px;vertical-align:middle;margin-right:4px}
+#status{margin-left:auto;color:#64748b}
+.leaflet-control-attribution{font-size:8px}
+</style>
+</head>
+<body>
+<div id="app">
+<header><strong>SAFARELEC MAP — ONCF LGV 60 kV</strong><span>Carte interactive dans Excel</span></header>
+<div id="toolbar">
+<input id="search" placeholder="Rechercher une ville, une adresse ou un lieu…">
+<button id="go">Rechercher</button>
+<button id="sat" class="active">Satellite</button>
+<button id="road">Plan</button>
+<button id="fit">Voir les tracés</button>
+</div>
+<div id="map"></div>
+<div id="legend"><span><i class="swatch" style="background:#1565c0"></i>Casa Sud – Sidi Maarouf</span><span><i class="swatch" style="background:#c62828"></i>Raccordements Aïn Sebaâ – Zenata</span><span id="status">Chargement des tracés…</span></div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+<script>
+const map=L.map('map',{zoomControl:true}).setView([33.56,-7.58],11);
+const road=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+satellite.addTo(map);
+let layers=[];
+async function loadRoutes(){
+ try{
+  const response=await fetch('routes.json');
+  if(!response.ok) throw new Error('routes.json indisponible');
+  const routes=await response.json();
+  const colors=['#1565c0','#c62828'];
+  routes.forEach((r,i)=>{
+   const pts=(r.coords||[]).map(p=>[p[0],p[1]]);
+   if(!pts.length)return;
+   const line=L.polyline(pts,{color:colors[i%colors.length],weight:5,opacity:.95}).addTo(map);
+   line.bindPopup('<b>'+String(r.name||'Tracé')+'</b><br>'+pts.length+' points GPS');
+   layers.push(line);
+   L.circleMarker(pts[0],{radius:5,color:colors[i%colors.length],fillOpacity:1}).addTo(map).bindTooltip('Début — '+(r.name||'Tracé'));
+   L.circleMarker(pts[pts.length-1],{radius:5,color:colors[i%colors.length],fillOpacity:1}).addTo(map).bindTooltip('Fin — '+(r.name||'Tracé'));
+  });
+  if(layers.length) map.fitBounds(L.featureGroup(layers).getBounds().pad(.08));
+  document.getElementById('status').textContent=routes.length+' tracés GPS chargés';
+ }catch(e){document.getElementById('status').textContent='Erreur de chargement : '+e.message;}
+}
+function search(){
+ const q=document.getElementById('search').value.trim(); if(!q)return;
+ fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(q),{headers:{'Accept-Language':'fr'}})
+ .then(r=>r.json()).then(a=>{
+  if(!a.length){document.getElementById('status').textContent='Lieu introuvable';return;}
+  const p=[+a[0].lat,+a[0].lon];map.setView(p,15);
+  L.marker(p).addTo(map).bindPopup(a[0].display_name).openPopup();
+  document.getElementById('status').textContent='Lieu trouvé';
+ }).catch(()=>document.getElementById('status').textContent='Recherche indisponible');
+}
+document.getElementById('go').onclick=search;
+document.getElementById('search').addEventListener('keydown',e=>{if(e.key==='Enter')search()});
+document.getElementById('sat').onclick=()=>{map.removeLayer(road);satellite.addTo(map);document.getElementById('sat').classList.add('active');document.getElementById('road').classList.remove('active')};
+document.getElementById('road').onclick=()=>{map.removeLayer(satellite);road.addTo(map);document.getElementById('road').classList.add('active');document.getElementById('sat').classList.remove('active')};
+document.getElementById('fit').onclick=()=>{if(layers.length)map.fitBounds(L.featureGroup(layers).getBounds().pad(.08))};
+loadRoutes();
+</script>
+</body>
+</html>
